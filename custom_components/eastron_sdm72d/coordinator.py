@@ -36,34 +36,51 @@ _LOGGER = logging.getLogger(__name__)
 # NOTE: 0x0030 is "Sum of line currents" (NOT neutral current).
 #       Neutral current is at 0x00E0 per the SDM72D-M-2 datasheet.
 
-_BLOCK1_START = 0x0000   # 9 parameters (18 registers)
+_BLOCK1_START = 0x0000   # 9 parameters (18 registers): per-phase V, I, P
 _BLOCK1_COUNT = 18
 
-_BLOCK2_START = 0x0034   # 12 parameters (24 registers)
+_BLOCK2_START = 0x0034   # 12 parameters (24 registers): total P/VA/VAr, PF, freq, energy
 _BLOCK2_COUNT = 24
 
 _BLOCK3_START = 0x00E0   # 1 parameter (2 registers): neutral current
 _BLOCK3_COUNT = 2
 
+_BLOCK4_START = 0x002A   # 1 parameter (2 registers): average line-to-neutral voltage
+_BLOCK4_COUNT = 2
+
+# Block 5 covers: total active energy (0x0156), resettable import (0x0184),
+# resettable export (0x0186), and net kWh (0x018C).
+# Reading as two sub-blocks is more efficient than one large sparse read.
+_BLOCK5_START = 0x0156   # 1 parameter (2 registers): total active energy (import+export)
+_BLOCK5_COUNT = 2
+
+_BLOCK6_START = 0x0184   # 3 parameters (10 registers): resettable import, export, net kWh
+_BLOCK6_COUNT = 10       # 0x0184–0x018D  (offsets: import=0, export=2, net=8)
+
 # (block_start, absolute_register_address) for each data key
 _R: dict[str, tuple[int, int]] = {
-    "voltage_l1":       (_BLOCK1_START, 0x0000),
-    "voltage_l2":       (_BLOCK1_START, 0x0002),
-    "voltage_l3":       (_BLOCK1_START, 0x0004),
-    "current_l1":       (_BLOCK1_START, 0x0006),
-    "current_l2":       (_BLOCK1_START, 0x0008),
-    "current_l3":       (_BLOCK1_START, 0x000A),
-    "power_l1":         (_BLOCK1_START, 0x000C),
-    "power_l2":         (_BLOCK1_START, 0x000E),
-    "power_l3":         (_BLOCK1_START, 0x0010),
-    "total_power":      (_BLOCK2_START, 0x0034),
-    "total_va":         (_BLOCK2_START, 0x0038),
-    "total_var":        (_BLOCK2_START, 0x003C),
-    "power_factor":     (_BLOCK2_START, 0x003E),
-    "frequency":        (_BLOCK2_START, 0x0046),
-    "import_energy":    (_BLOCK2_START, 0x0048),
-    "export_energy":    (_BLOCK2_START, 0x004A),
-    "neutral_current":  (_BLOCK3_START, 0x00E0),
+    "voltage_l1":           (_BLOCK1_START, 0x0000),
+    "voltage_l2":           (_BLOCK1_START, 0x0002),
+    "voltage_l3":           (_BLOCK1_START, 0x0004),
+    "current_l1":           (_BLOCK1_START, 0x0006),
+    "current_l2":           (_BLOCK1_START, 0x0008),
+    "current_l3":           (_BLOCK1_START, 0x000A),
+    "power_l1":             (_BLOCK1_START, 0x000C),
+    "power_l2":             (_BLOCK1_START, 0x000E),
+    "power_l3":             (_BLOCK1_START, 0x0010),
+    "avg_voltage":          (_BLOCK4_START, 0x002A),
+    "total_power":          (_BLOCK2_START, 0x0034),
+    "total_va":             (_BLOCK2_START, 0x0038),
+    "total_var":            (_BLOCK2_START, 0x003C),
+    "power_factor":         (_BLOCK2_START, 0x003E),
+    "frequency":            (_BLOCK2_START, 0x0046),
+    "import_energy":        (_BLOCK2_START, 0x0048),
+    "export_energy":        (_BLOCK2_START, 0x004A),
+    "neutral_current":      (_BLOCK3_START, 0x00E0),
+    "total_energy":         (_BLOCK5_START, 0x0156),
+    "resettable_import":    (_BLOCK6_START, 0x0184),
+    "resettable_export":    (_BLOCK6_START, 0x0186),
+    "net_energy":           (_BLOCK6_START, 0x018C),
 }
 
 # Seconds before a connect or read attempt is abandoned
@@ -164,7 +181,7 @@ class SDM72DCoordinator(DataUpdateCoordinator[dict[str, float]]):
         try:
             client = await self._get_client()
 
-            # Three targeted reads — all within the 30-parameter-per-request limit.
+            # Targeted reads — all within the 30-parameter-per-request limit.
             # asyncio.wait_for enforces a hard deadline per read in case the device
             # stalls mid-response (e.g. RS485 bus contention).
             async def read(address: int, count: int) -> list[int]:
@@ -179,11 +196,17 @@ class SDM72DCoordinator(DataUpdateCoordinator[dict[str, float]]):
             b1 = await read(_BLOCK1_START, _BLOCK1_COUNT)
             b2 = await read(_BLOCK2_START, _BLOCK2_COUNT)
             b3 = await read(_BLOCK3_START, _BLOCK3_COUNT)
+            b4 = await read(_BLOCK4_START, _BLOCK4_COUNT)
+            b5 = await read(_BLOCK5_START, _BLOCK5_COUNT)
+            b6 = await read(_BLOCK6_START, _BLOCK6_COUNT)
 
             block_map = {
                 _BLOCK1_START: b1,
                 _BLOCK2_START: b2,
                 _BLOCK3_START: b3,
+                _BLOCK4_START: b4,
+                _BLOCK5_START: b5,
+                _BLOCK6_START: b6,
             }
 
             return {

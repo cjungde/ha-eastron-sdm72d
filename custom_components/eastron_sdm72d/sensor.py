@@ -191,6 +191,51 @@ SENSOR_DESCRIPTIONS: tuple[SDM72DSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
         suggested_display_precision=2,
     ),
+    # ── Average line-to-neutral voltage (0x002A) ──────────────────────────────
+    SDM72DSensorDescription(
+        key="avg_voltage", data_key="avg_voltage",
+        name="Durchschnittsspannung",
+        device_class=SensorDeviceClass.VOLTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
+        suggested_display_precision=1,
+    ),
+    # ── Total active energy import+export (0x0156) — for HA Energy Dashboard ──
+    SDM72DSensorDescription(
+        key="total_energy", data_key="total_energy",
+        name="Gesamtenergie",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        suggested_display_precision=2,
+    ),
+    # ── Resettable import / export counters (0x0184, 0x0186) ─────────────────
+    SDM72DSensorDescription(
+        key="resettable_import", data_key="resettable_import",
+        name="Wirkleistung Import (Rücksetzbar)",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        suggested_display_precision=2,
+    ),
+    SDM72DSensorDescription(
+        key="resettable_export", data_key="resettable_export",
+        name="Wirkleistung Export (Rücksetzbar)",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        suggested_display_precision=2,
+    ),
+    # ── Net energy balance (0x018C) ────────────────────────────────────────────
+    # Can go negative (export > import), so TOTAL not TOTAL_INCREASING.
+    SDM72DSensorDescription(
+        key="net_energy", data_key="net_energy",
+        name="Nettoenergie",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        suggested_display_precision=2,
+    ),
 )
 
 

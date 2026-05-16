@@ -1,0 +1,53 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Eastron SDM72D – Connection Type",
+        "data": {
+          "connection_type": "Connection type"
+        },
+        "data_description": {
+          "connection_type": "TCP for Modbus-TCP (Ethernet adapter), RTU for direct RS485 connection"
+        }
+      },
+      "tcp": {
+        "title": "Eastron SDM72D – Modbus TCP",
+        "data": {
+          "host": "IP address / hostname",
+          "port": "TCP port",
+          "slave_id": "Slave ID (device address)",
+          "scan_interval": "Poll interval (seconds)"
+        }
+      },
+      "rtu": {
+        "title": "Eastron SDM72D – Modbus RTU (RS485)",
+        "data": {
+          "serial_port": "Serial port",
+          "baudrate": "Baudrate",
+          "parity": "Parity (N=none, E=even, O=odd)",
+          "stopbits": "Stop bits",
+          "slave_id": "Slave ID (device address)",
+          "scan_interval": "Poll interval (seconds)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to the device.",
+      "invalid_slave_id": "Slave ID not responding – check device address.",
+      "unknown": "Unknown error."
+    },
+    "abort": {
+      "already_configured": "This device is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Options",
+        "data": {
+          "scan_interval": "Poll interval (seconds)"
+        }
+      }
+    }
+  }
+}

@@ -25,32 +25,49 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-# SDM72D input register map (all values are 32-bit IEEE 754 floats, 2 registers each)
-_REG_VOLTAGE_L1 = 0       # V
-_REG_VOLTAGE_L2 = 2       # V
-_REG_VOLTAGE_L3 = 4       # V
-_REG_CURRENT_L1 = 6       # A
-_REG_CURRENT_L2 = 8       # A
-_REG_CURRENT_L3 = 10      # A
-_REG_POWER_L1 = 12        # W
-_REG_POWER_L2 = 14        # W
-_REG_POWER_L3 = 16        # W
-_REG_NEUTRAL_CURRENT = 48  # A
-_REG_TOTAL_POWER = 52      # W
-_REG_POWER_FACTOR = 62     # dimensionless
-_REG_FREQUENCY = 70        # Hz
-_REG_IMPORT_ENERGY = 72    # kWh
-_REG_EXPORT_ENERGY = 74    # kWh
+# SDM72D-M-2 input register map — all values are 32-bit IEEE 754 floats (2 registers each).
+# Function code 04. Max 30 parameters (60 registers) per request.
+#
+# Block 1: 0x0000–0x0011 — per-phase voltage, current, active power
+# Block 2: 0x0034–0x004B — total power, power factor, frequency, import/export energy
+# Block 3: 0x00E0–0x00E1 — neutral current
+#
+# NOTE: 0x0030 is "Sum of line currents" (NOT neutral current).
+#       Neutral current is at 0x00E0 per the SDM72D-M-2 datasheet.
 
-# Read two contiguous blocks to cover all needed registers
-_BLOCK1_START = 0   # registers 0-17: voltages, currents, per-phase power
+_BLOCK1_START = 0x0000   # 9 parameters (18 registers)
 _BLOCK1_COUNT = 18
-_BLOCK2_START = 48  # registers 48-75: neutral I, total P, PF, freq, energy
-_BLOCK2_COUNT = 28
+
+_BLOCK2_START = 0x0034   # 12 parameters (24 registers): total P, VA, VAr, PF, freq, energy
+_BLOCK2_COUNT = 24
+
+_BLOCK3_START = 0x00E0   # 1 parameter (2 registers): neutral current
+_BLOCK3_COUNT = 2
+
+# Register offsets within each block (absolute address - block_start)
+_R = {
+    "voltage_l1":       (_BLOCK1_START, 0x0000),
+    "voltage_l2":       (_BLOCK1_START, 0x0002),
+    "voltage_l3":       (_BLOCK1_START, 0x0004),
+    "current_l1":       (_BLOCK1_START, 0x0006),
+    "current_l2":       (_BLOCK1_START, 0x0008),
+    "current_l3":       (_BLOCK1_START, 0x000A),
+    "power_l1":         (_BLOCK1_START, 0x000C),
+    "power_l2":         (_BLOCK1_START, 0x000E),
+    "power_l3":         (_BLOCK1_START, 0x0010),
+    "total_power":      (_BLOCK2_START, 0x0034),
+    "total_va":         (_BLOCK2_START, 0x0038),
+    "total_var":        (_BLOCK2_START, 0x003C),
+    "power_factor":     (_BLOCK2_START, 0x003E),
+    "frequency":        (_BLOCK2_START, 0x0046),
+    "import_energy":    (_BLOCK2_START, 0x0048),
+    "export_energy":    (_BLOCK2_START, 0x004A),
+    "neutral_current":  (_BLOCK3_START, 0x00E0),
+}
 
 
-def _to_float(registers: list[int], address: int, block_start: int) -> float:
-    """Decode two 16-bit input registers as a big-endian IEEE 754 float32."""
+def _f32(registers: list[int], block_start: int, address: int) -> float:
+    """Decode a 32-bit IEEE 754 float from two consecutive input registers."""
     offset = address - block_start
     raw = struct.pack(">HH", registers[offset], registers[offset + 1])
     return round(struct.unpack(">f", raw)[0], 4)
@@ -74,7 +91,7 @@ class SDM72DCoordinator(DataUpdateCoordinator[dict[str, float]]):
         )
 
     async def _get_client(self) -> Any:
-        """Return a connected Modbus client, (re-)connecting if necessary."""
+        """Return a connected Modbus client, reconnecting if necessary."""
         from pymodbus.client import AsyncModbusTcpClient, AsyncModbusSerialClient
 
         if self._client is not None and self._client.connected:
@@ -108,37 +125,23 @@ class SDM72DCoordinator(DataUpdateCoordinator[dict[str, float]]):
         try:
             client = await self._get_client()
 
-            r1 = await client.read_input_registers(
-                address=_BLOCK1_START, count=_BLOCK1_COUNT, slave=slave
-            )
-            r2 = await client.read_input_registers(
-                address=_BLOCK2_START, count=_BLOCK2_COUNT, slave=slave
-            )
+            # Three targeted reads — all within the 30-parameter-per-request limit
+            r1 = await client.read_input_registers(address=_BLOCK1_START, count=_BLOCK1_COUNT, slave=slave)
+            r2 = await client.read_input_registers(address=_BLOCK2_START, count=_BLOCK2_COUNT, slave=slave)
+            r3 = await client.read_input_registers(address=_BLOCK3_START, count=_BLOCK3_COUNT, slave=slave)
 
-            if hasattr(r1, "isError") and r1.isError():
-                raise UpdateFailed(f"Modbus error block 1: {r1}")
-            if hasattr(r2, "isError") and r2.isError():
-                raise UpdateFailed(f"Modbus error block 2: {r2}")
+            for label, r in (("block1", r1), ("block2", r2), ("block3", r3)):
+                if hasattr(r, "isError") and r.isError():
+                    raise UpdateFailed(f"Modbus error {label}: {r}")
 
-            b1, b2 = r1.registers, r2.registers
+            b1, b2, b3 = r1.registers, r2.registers, r3.registers
 
-            return {
-                "voltage_l1":        _to_float(b1, _REG_VOLTAGE_L1,       _BLOCK1_START),
-                "voltage_l2":        _to_float(b1, _REG_VOLTAGE_L2,       _BLOCK1_START),
-                "voltage_l3":        _to_float(b1, _REG_VOLTAGE_L3,       _BLOCK1_START),
-                "current_l1":        _to_float(b1, _REG_CURRENT_L1,       _BLOCK1_START),
-                "current_l2":        _to_float(b1, _REG_CURRENT_L2,       _BLOCK1_START),
-                "current_l3":        _to_float(b1, _REG_CURRENT_L3,       _BLOCK1_START),
-                "power_l1":          _to_float(b1, _REG_POWER_L1,         _BLOCK1_START),
-                "power_l2":          _to_float(b1, _REG_POWER_L2,         _BLOCK1_START),
-                "power_l3":          _to_float(b1, _REG_POWER_L3,         _BLOCK1_START),
-                "neutral_current":   _to_float(b2, _REG_NEUTRAL_CURRENT,  _BLOCK2_START),
-                "total_power":       _to_float(b2, _REG_TOTAL_POWER,      _BLOCK2_START),
-                "power_factor":      _to_float(b2, _REG_POWER_FACTOR,     _BLOCK2_START),
-                "frequency":         _to_float(b2, _REG_FREQUENCY,        _BLOCK2_START),
-                "import_energy":     _to_float(b2, _REG_IMPORT_ENERGY,    _BLOCK2_START),
-                "export_energy":     _to_float(b2, _REG_EXPORT_ENERGY,    _BLOCK2_START),
-            }
+            def f(key: str) -> float:
+                block_start, address = _R[key]
+                regs = {_BLOCK1_START: b1, _BLOCK2_START: b2, _BLOCK3_START: b3}[block_start]
+                return _f32(regs, block_start, address)
+
+            return {key: f(key) for key in _R}
 
         except ModbusException as exc:
             self._client = None  # force reconnect on next poll

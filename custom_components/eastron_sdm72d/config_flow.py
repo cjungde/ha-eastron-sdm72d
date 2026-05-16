@@ -93,7 +93,7 @@ class SDM72DConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
     _connection_type: str = CONNECTION_TCP
-    _partial_data: dict = {}
+    _reconfigure_entry: config_entries.ConfigEntry | None = None
 
     async def async_step_user(self, user_input=None) -> FlowResult:
         if user_input is not None:
@@ -106,10 +106,17 @@ class SDM72DConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_tcp(self, user_input=None) -> FlowResult:
         errors: dict[str, str] = {}
+        defaults = self._reconfigure_entry.data if self._reconfigure_entry else {}
         if user_input is not None:
             data = {CONF_CONNECTION_TYPE: CONNECTION_TCP, **user_input}
             error = await _test_connection(data)
             if error is None:
+                if self._reconfigure_entry:
+                    return self.async_update_reload_and_abort(
+                        self._reconfigure_entry,
+                        title=f"SDM72D {data['host']}",
+                        data=data,
+                    )
                 await self.async_set_unique_id(f"{data['host']}:{data['port']}:{data[CONF_SLAVE_ID]}")
                 self._abort_if_unique_id_configured()
                 return self.async_create_entry(title=f"SDM72D {data['host']}", data=data)
@@ -117,16 +124,23 @@ class SDM72DConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="tcp",
-            data_schema=_schema_tcp(user_input or {}),
+            data_schema=_schema_tcp(user_input or defaults),
             errors=errors,
         )
 
     async def async_step_rtu(self, user_input=None) -> FlowResult:
         errors: dict[str, str] = {}
+        defaults = self._reconfigure_entry.data if self._reconfigure_entry else {}
         if user_input is not None:
             data = {CONF_CONNECTION_TYPE: CONNECTION_RTU, **user_input}
             error = await _test_connection(data)
             if error is None:
+                if self._reconfigure_entry:
+                    return self.async_update_reload_and_abort(
+                        self._reconfigure_entry,
+                        title=f"SDM72D {data[CONF_SERIAL_PORT]}",
+                        data=data,
+                    )
                 await self.async_set_unique_id(f"{data[CONF_SERIAL_PORT]}:{data[CONF_SLAVE_ID]}")
                 self._abort_if_unique_id_configured()
                 return self.async_create_entry(title=f"SDM72D {data[CONF_SERIAL_PORT]}", data=data)
@@ -134,9 +148,25 @@ class SDM72DConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="rtu",
-            data_schema=_schema_rtu(user_input or {}),
+            data_schema=_schema_rtu(user_input or defaults),
             errors=errors,
         )
+
+    async def async_step_reconfigure(self, user_input=None) -> FlowResult:
+        """Allow reconfiguring an existing entry (IP, port, slave ID, connection type)."""
+        self._reconfigure_entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+        current_type = self._reconfigure_entry.data.get(CONF_CONNECTION_TYPE, CONNECTION_TCP)
+
+        if user_input is not None:
+            self._connection_type = user_input[CONF_CONNECTION_TYPE]
+            if self._connection_type == CONNECTION_TCP:
+                return await self.async_step_tcp()
+            return await self.async_step_rtu()
+
+        schema = vol.Schema(
+            {vol.Required(CONF_CONNECTION_TYPE, default=current_type): vol.In([CONNECTION_TCP, CONNECTION_RTU])}
+        )
+        return self.async_show_form(step_id="reconfigure", data_schema=schema)
 
     @staticmethod
     @callback

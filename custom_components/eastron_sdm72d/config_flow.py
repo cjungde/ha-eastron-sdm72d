@@ -17,6 +17,7 @@ from .const import (
     CONF_SCAN_INTERVAL,
     CONNECTION_TCP,
     CONNECTION_RTU,
+    CONNECTION_TCP_RTU,
     DEFAULT_PORT,
     DEFAULT_SLAVE_ID,
     DEFAULT_BAUDRATE,
@@ -26,7 +27,7 @@ from .const import (
 )
 
 _SCHEMA_CONNECTION_TYPE = vol.Schema(
-    {vol.Required(CONF_CONNECTION_TYPE, default=CONNECTION_TCP): vol.In([CONNECTION_TCP, CONNECTION_RTU])}
+    {vol.Required(CONF_CONNECTION_TYPE, default=CONNECTION_TCP): vol.In([CONNECTION_TCP, CONNECTION_TCP_RTU, CONNECTION_RTU])}
 )
 
 
@@ -97,7 +98,7 @@ class SDM72DConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(self, user_input=None) -> FlowResult:
         if user_input is not None:
             self._connection_type = user_input[CONF_CONNECTION_TYPE]
-            if self._connection_type == CONNECTION_TCP:
+            if self._connection_type in (CONNECTION_TCP, CONNECTION_TCP_RTU):
                 return await self.async_step_tcp()
             return await self.async_step_rtu()
 
@@ -107,7 +108,7 @@ class SDM72DConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
         defaults = self._reconfigure_entry.data if self._reconfigure_entry else {}
         if user_input is not None:
-            data = {CONF_CONNECTION_TYPE: CONNECTION_TCP, **user_input}
+            data = {CONF_CONNECTION_TYPE: self._connection_type, **user_input}
             error = await _test_connection(data)
             if error is None:
                 if self._reconfigure_entry:
@@ -158,12 +159,12 @@ class SDM72DConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             self._connection_type = user_input[CONF_CONNECTION_TYPE]
-            if self._connection_type == CONNECTION_TCP:
+            if self._connection_type in (CONNECTION_TCP, CONNECTION_TCP_RTU):
                 return await self.async_step_tcp()
             return await self.async_step_rtu()
 
         schema = vol.Schema(
-            {vol.Required(CONF_CONNECTION_TYPE, default=current_type): vol.In([CONNECTION_TCP, CONNECTION_RTU])}
+            {vol.Required(CONF_CONNECTION_TYPE, default=current_type): vol.In([CONNECTION_TCP, CONNECTION_TCP_RTU, CONNECTION_RTU])}
         )
         return self.async_show_form(step_id="reconfigure", data_schema=schema)
 

@@ -7,11 +7,11 @@
           "connection_type": "Verbindungstyp"
         },
         "data_description": {
-          "connection_type": "TCP für Modbus-TCP (Ethernet-Adapter), RTU für direkte RS485-Verbindung"
+          "connection_type": "TCP: natives Modbus TCP (MBAP-Header) | TCP (RTU-Gateway): Seriell-Ethernet-Adapter wie Waveshare RS232/RS485-to-ETH | RTU: direkte RS485-Verbindung"
         }
       },
       "tcp": {
-        "title": "Eastron SDM72D – Modbus TCP",
+        "title": "Eastron SDM72D – Netzwerkverbindung",
         "data": {
           "host": "IP-Adresse / Hostname",
           "port": "TCP-Port",
@@ -50,7 +50,7 @@
         }
       },
       "tcp": {
-        "title": "Eastron SDM72D – Modbus TCP",
+        "title": "Eastron SDM72D – Netzwerkverbindung",
         "data": {
           "host": "IP-Adresse / Hostname",
           "port": "TCP-Port",

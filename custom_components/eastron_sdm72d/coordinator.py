@@ -21,6 +21,7 @@ from .const import (
     CONF_STOPBITS,
     CONF_SCAN_INTERVAL,
     CONNECTION_TCP,
+    CONNECTION_TCP_RTU,
     DEFAULT_SCAN_INTERVAL,
 )
 
@@ -107,10 +108,28 @@ def _build_client(data: dict) -> Any:
     """Instantiate the appropriate pymodbus async client from config entry data."""
     from pymodbus.client import AsyncModbusTcpClient, AsyncModbusSerialClient
 
-    if data.get(CONF_CONNECTION_TYPE, CONNECTION_TCP) == CONNECTION_TCP:
+    conn_type = data.get(CONF_CONNECTION_TYPE, CONNECTION_TCP)
+
+    if conn_type == CONNECTION_TCP:
         return AsyncModbusTcpClient(
             host=data["host"],
             port=data.get("port", 502),
+            timeout=_MODBUS_TIMEOUT,
+        )
+
+    if conn_type == CONNECTION_TCP_RTU:
+        # Transparent serial-to-Ethernet gateway (e.g. Waveshare RS232/RS485-to-ETH).
+        # The gateway tunnels raw RTU frames over TCP, so we use the TCP transport
+        # but switch to RTU framing instead of the default MBAP/TCP framing.
+        try:
+            from pymodbus.framer import FramerType
+            framer = FramerType.RTU
+        except ImportError:
+            framer = "rtu"
+        return AsyncModbusTcpClient(
+            host=data["host"],
+            port=data.get("port", 502),
+            framer=framer,
             timeout=_MODBUS_TIMEOUT,
         )
 

@@ -10,6 +10,7 @@ CONF_SCAN_INTERVAL = "scan_interval"
 
 CONNECTION_TCP = "tcp"
 CONNECTION_RTU = "rtu"
+CONNECTION_TCP_RTU = "tcp_rtu"  # RTU framing over TCP — transparent serial-to-Ethernet gateway
 
 DEFAULT_PORT = 502
 DEFAULT_SLAVE_ID = 1

@@ -54,38 +54,37 @@ def _schema_rtu(defaults: dict) -> vol.Schema:
     )
 
 
+_TEST_TIMEOUT = 10  # seconds
+
+
 async def _test_connection(data: dict) -> str | None:
     """Try to connect and read one register. Returns an error key or None on success."""
+    import asyncio
+    from pymodbus.exceptions import ModbusException
+    from .coordinator import _build_client
+
+    client = _build_client(data)
     try:
-        from pymodbus.client import AsyncModbusTcpClient, AsyncModbusSerialClient
-        from pymodbus.exceptions import ModbusException
-
-        if data.get(CONF_CONNECTION_TYPE, CONNECTION_TCP) == CONNECTION_TCP:
-            client = AsyncModbusTcpClient(host=data["host"], port=data.get("port", DEFAULT_PORT))
-        else:
-            client = AsyncModbusSerialClient(
-                port=data[CONF_SERIAL_PORT],
-                baudrate=data.get(CONF_BAUDRATE, DEFAULT_BAUDRATE),
-                parity=data.get(CONF_PARITY, DEFAULT_PARITY),
-                stopbits=data.get(CONF_STOPBITS, DEFAULT_STOPBITS),
-                bytesize=8,
-            )
-
-        await client.connect()
+        await asyncio.wait_for(client.connect(), timeout=_TEST_TIMEOUT)
         if not client.connected:
             return "cannot_connect"
 
-        result = await client.read_input_registers(address=52, count=2, slave=data[CONF_SLAVE_ID])
-        client.close()
-
+        result = await asyncio.wait_for(
+            client.read_input_registers(address=0x0034, count=2, slave=data[CONF_SLAVE_ID]),
+            timeout=_TEST_TIMEOUT,
+        )
         if hasattr(result, "isError") and result.isError():
             return "invalid_slave_id"
         return None
 
+    except asyncio.TimeoutError:
+        return "cannot_connect"
     except ModbusException:
         return "cannot_connect"
     except Exception:
         return "unknown"
+    finally:
+        client.close()
 
 
 class SDM72DConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):

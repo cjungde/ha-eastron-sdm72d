@@ -1,6 +1,7 @@
 """DataUpdateCoordinator for the Eastron SDM72D."""
 from __future__ import annotations
 
+import asyncio
 import logging
 import struct
 from datetime import timedelta
@@ -29,7 +30,7 @@ _LOGGER = logging.getLogger(__name__)
 # Function code 04. Max 30 parameters (60 registers) per request.
 #
 # Block 1: 0x0000–0x0011 — per-phase voltage, current, active power
-# Block 2: 0x0034–0x004B — total power, power factor, frequency, import/export energy
+# Block 2: 0x0034–0x004B — total power, VA, VAr, PF, frequency, import/export energy
 # Block 3: 0x00E0–0x00E1 — neutral current
 #
 # NOTE: 0x0030 is "Sum of line currents" (NOT neutral current).
@@ -38,14 +39,14 @@ _LOGGER = logging.getLogger(__name__)
 _BLOCK1_START = 0x0000   # 9 parameters (18 registers)
 _BLOCK1_COUNT = 18
 
-_BLOCK2_START = 0x0034   # 12 parameters (24 registers): total P, VA, VAr, PF, freq, energy
+_BLOCK2_START = 0x0034   # 12 parameters (24 registers)
 _BLOCK2_COUNT = 24
 
 _BLOCK3_START = 0x00E0   # 1 parameter (2 registers): neutral current
 _BLOCK3_COUNT = 2
 
-# Register offsets within each block (absolute address - block_start)
-_R = {
+# (block_start, absolute_register_address) for each data key
+_R: dict[str, tuple[int, int]] = {
     "voltage_l1":       (_BLOCK1_START, 0x0000),
     "voltage_l2":       (_BLOCK1_START, 0x0002),
     "voltage_l3":       (_BLOCK1_START, 0x0004),
@@ -65,12 +66,54 @@ _R = {
     "neutral_current":  (_BLOCK3_START, 0x00E0),
 }
 
+# Seconds before a connect or read attempt is abandoned
+_MODBUS_TIMEOUT = 10
+
 
 def _f32(registers: list[int], block_start: int, address: int) -> float:
-    """Decode a 32-bit IEEE 754 float from two consecutive input registers."""
+    """Decode a 32-bit IEEE 754 float from two consecutive input registers.
+
+    Raises UpdateFailed if the register block is shorter than expected so the
+    caller gets a clean error instead of an IndexError.
+    """
     offset = address - block_start
+    if offset < 0 or offset + 1 >= len(registers):
+        raise UpdateFailed(
+            f"Register block starting at 0x{block_start:04X} is too short "
+            f"(need offset {offset + 1}, got {len(registers)} registers)"
+        )
     raw = struct.pack(">HH", registers[offset], registers[offset + 1])
     return round(struct.unpack(">f", raw)[0], 4)
+
+
+def _build_client(data: dict) -> Any:
+    """Instantiate the appropriate pymodbus async client from config entry data."""
+    from pymodbus.client import AsyncModbusTcpClient, AsyncModbusSerialClient
+
+    if data.get(CONF_CONNECTION_TYPE, CONNECTION_TCP) == CONNECTION_TCP:
+        return AsyncModbusTcpClient(
+            host=data["host"],
+            port=data.get("port", 502),
+            timeout=_MODBUS_TIMEOUT,
+        )
+
+    # RTU — explicitly request the RTU framer; pymodbus 3.x defaults to RTU for
+    # serial clients but being explicit avoids any version-specific surprises.
+    try:
+        from pymodbus.framer import FramerType
+        framer = FramerType.RTU
+    except ImportError:
+        framer = "rtu"  # pymodbus < 3.4 string fallback
+
+    return AsyncModbusSerialClient(
+        port=data[CONF_SERIAL_PORT],
+        framer=framer,
+        baudrate=data.get(CONF_BAUDRATE, 9600),
+        parity=data.get(CONF_PARITY, "N"),
+        stopbits=data.get(CONF_STOPBITS, 1),
+        bytesize=8,
+        timeout=_MODBUS_TIMEOUT,
+    )
 
 
 class SDM72DCoordinator(DataUpdateCoordinator[dict[str, float]]):
@@ -91,31 +134,27 @@ class SDM72DCoordinator(DataUpdateCoordinator[dict[str, float]]):
         )
 
     async def _get_client(self) -> Any:
-        """Return a connected Modbus client, reconnecting if necessary."""
-        from pymodbus.client import AsyncModbusTcpClient, AsyncModbusSerialClient
-
-        if self._client is not None and self._client.connected:
-            return self._client
-
-        data = self._entry.data
-        if data.get(CONF_CONNECTION_TYPE, CONNECTION_TCP) == CONNECTION_TCP:
-            self._client = AsyncModbusTcpClient(
-                host=data["host"],
-                port=data.get("port", 502),
-            )
-        else:
-            self._client = AsyncModbusSerialClient(
-                port=data[CONF_SERIAL_PORT],
-                baudrate=data.get(CONF_BAUDRATE, 9600),
-                parity=data.get(CONF_PARITY, "N"),
-                stopbits=data.get(CONF_STOPBITS, 1),
-                bytesize=8,
-            )
-
-        await self._client.connect()
-        if not self._client.connected:
+        """Return a connected Modbus client, closing any stale connection first."""
+        if self._client is not None:
+            if self._client.connected:
+                return self._client
+            # Stale client — close it cleanly before creating a new one so that
+            # serial ports and TCP sockets are released immediately.
+            self._client.close()
             self._client = None
+
+        client = _build_client(self._entry.data)
+        try:
+            await asyncio.wait_for(client.connect(), timeout=_MODBUS_TIMEOUT)
+        except asyncio.TimeoutError as exc:
+            client.close()
+            raise UpdateFailed("Connection to SDM72D timed out") from exc
+
+        if not client.connected:
+            client.close()
             raise UpdateFailed("Could not connect to SDM72D")
+
+        self._client = client
         return self._client
 
     async def _async_update_data(self) -> dict[str, float]:
@@ -125,30 +164,47 @@ class SDM72DCoordinator(DataUpdateCoordinator[dict[str, float]]):
         try:
             client = await self._get_client()
 
-            # Three targeted reads — all within the 30-parameter-per-request limit
-            r1 = await client.read_input_registers(address=_BLOCK1_START, count=_BLOCK1_COUNT, slave=slave)
-            r2 = await client.read_input_registers(address=_BLOCK2_START, count=_BLOCK2_COUNT, slave=slave)
-            r3 = await client.read_input_registers(address=_BLOCK3_START, count=_BLOCK3_COUNT, slave=slave)
+            # Three targeted reads — all within the 30-parameter-per-request limit.
+            # asyncio.wait_for enforces a hard deadline per read in case the device
+            # stalls mid-response (e.g. RS485 bus contention).
+            async def read(address: int, count: int) -> list[int]:
+                result = await asyncio.wait_for(
+                    client.read_input_registers(address=address, count=count, slave=slave),
+                    timeout=_MODBUS_TIMEOUT,
+                )
+                if hasattr(result, "isError") and result.isError():
+                    raise UpdateFailed(f"Modbus error at 0x{address:04X}: {result}")
+                return result.registers
 
-            for label, r in (("block1", r1), ("block2", r2), ("block3", r3)):
-                if hasattr(r, "isError") and r.isError():
-                    raise UpdateFailed(f"Modbus error {label}: {r}")
+            b1 = await read(_BLOCK1_START, _BLOCK1_COUNT)
+            b2 = await read(_BLOCK2_START, _BLOCK2_COUNT)
+            b3 = await read(_BLOCK3_START, _BLOCK3_COUNT)
 
-            b1, b2, b3 = r1.registers, r2.registers, r3.registers
+            block_map = {
+                _BLOCK1_START: b1,
+                _BLOCK2_START: b2,
+                _BLOCK3_START: b3,
+            }
 
-            def f(key: str) -> float:
-                block_start, address = _R[key]
-                regs = {_BLOCK1_START: b1, _BLOCK2_START: b2, _BLOCK3_START: b3}[block_start]
-                return _f32(regs, block_start, address)
+            return {
+                key: _f32(block_map[block_start], block_start, address)
+                for key, (block_start, address) in _R.items()
+            }
 
-            return {key: f(key) for key in _R}
-
+        except asyncio.TimeoutError as exc:
+            self._client = None
+            raise UpdateFailed("Modbus read timed out") from exc
         except ModbusException as exc:
-            self._client = None  # force reconnect on next poll
+            self._client = None
             raise UpdateFailed(f"Modbus communication error: {exc}") from exc
+        except UpdateFailed:
+            raise
+        except Exception as exc:
+            self._client = None
+            raise UpdateFailed(f"Unexpected error polling SDM72D: {exc}") from exc
 
     async def async_close(self) -> None:
-        """Close the Modbus connection."""
+        """Close the Modbus connection on integration unload."""
         if self._client is not None:
             self._client.close()
             self._client = None

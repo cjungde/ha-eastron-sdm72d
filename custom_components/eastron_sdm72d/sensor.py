@@ -232,4 +232,11 @@ class SDM72DSensor(CoordinatorEntity[SDM72DCoordinator], SensorEntity):
     def native_value(self) -> float | None:
         if self.coordinator.data is None:
             return None
-        return self.coordinator.data.get(self.entity_description.data_key)
+        value = self.coordinator.data.get(self.entity_description.data_key)
+        if value is None:
+            return None
+        # Power factor: SDM72D uses sign to indicate current direction (negative = reverse).
+        # Clamp to [-1, 1] to guard against float artefacts at the limits.
+        if self.entity_description.key == "power_factor":
+            return max(-1.0, min(1.0, value))
+        return value

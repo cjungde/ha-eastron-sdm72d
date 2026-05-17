@@ -84,7 +84,7 @@ async def _test_connection(data: dict) -> str | None:
             return "cannot_connect"
 
         result = await asyncio.wait_for(
-            client.read_input_registers(0x0034, 2, data[CONF_SLAVE_ID]),
+            client.read_input_registers(0x0034, count=2, unit=data[CONF_SLAVE_ID]),
             timeout=_TEST_TIMEOUT,
         )
         if hasattr(result, "isError") and result.isError():

@@ -182,6 +182,7 @@ class SDM72DCoordinator(DataUpdateCoordinator[dict[str, float]]):
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self._entry = entry
         self._client: Any = None
+        self._modbus_lock = asyncio.Lock()
         scan_interval = entry.options.get(
             CONF_SCAN_INTERVAL,
             entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
@@ -221,56 +222,57 @@ class SDM72DCoordinator(DataUpdateCoordinator[dict[str, float]]):
         from pymodbus.exceptions import ModbusException
 
         slave = self._entry.data[CONF_SLAVE_ID]
-        try:
-            client = await self._get_client()
+        async with self._modbus_lock:
+            try:
+                client = await self._get_client()
 
-            # Targeted reads — all within the 30-parameter-per-request limit.
-            # asyncio.wait_for enforces a hard deadline per read in case the device
-            # stalls mid-response (e.g. RS485 bus contention).
-            async def read(address: int, count: int) -> list[int]:
-                kwargs: dict = {"count": count}
-                if _SLAVE_KWARG:
-                    kwargs[_SLAVE_KWARG] = slave
-                result = await asyncio.wait_for(
-                    client.read_input_registers(address, **kwargs),
-                    timeout=_MODBUS_TIMEOUT,
-                )
-                if hasattr(result, "isError") and result.isError():
-                    raise UpdateFailed(f"Modbus error at 0x{address:04X}: {result}")
-                return result.registers
+                # Targeted reads — all within the 30-parameter-per-request limit.
+                # asyncio.wait_for enforces a hard deadline per read in case the device
+                # stalls mid-response (e.g. RS485 bus contention).
+                async def read(address: int, count: int) -> list[int]:
+                    kwargs: dict = {"count": count}
+                    if _SLAVE_KWARG:
+                        kwargs[_SLAVE_KWARG] = slave
+                    result = await asyncio.wait_for(
+                        client.read_input_registers(address, **kwargs),
+                        timeout=_MODBUS_TIMEOUT,
+                    )
+                    if hasattr(result, "isError") and result.isError():
+                        raise UpdateFailed(f"Modbus error at 0x{address:04X}: {result}")
+                    return result.registers
 
-            b1 = await read(_BLOCK1_START, _BLOCK1_COUNT)
-            b2 = await read(_BLOCK2_START, _BLOCK2_COUNT)
-            b3 = await read(_BLOCK3_START, _BLOCK3_COUNT)
-            b4 = await read(_BLOCK4_START, _BLOCK4_COUNT)
-            b5 = await read(_BLOCK5_START, _BLOCK5_COUNT)
-            b6 = await read(_BLOCK6_START, _BLOCK6_COUNT)
+                b1 = await read(_BLOCK1_START, _BLOCK1_COUNT)
+                b2 = await read(_BLOCK2_START, _BLOCK2_COUNT)
+                b3 = await read(_BLOCK3_START, _BLOCK3_COUNT)
+                b4 = await read(_BLOCK4_START, _BLOCK4_COUNT)
+                b5 = await read(_BLOCK5_START, _BLOCK5_COUNT)
+                b6 = await read(_BLOCK6_START, _BLOCK6_COUNT)
 
-            block_map = {
-                _BLOCK1_START: b1,
-                _BLOCK2_START: b2,
-                _BLOCK3_START: b3,
-                _BLOCK4_START: b4,
-                _BLOCK5_START: b5,
-                _BLOCK6_START: b6,
-            }
+                block_map = {
+                    _BLOCK1_START: b1,
+                    _BLOCK2_START: b2,
+                    _BLOCK3_START: b3,
+                    _BLOCK4_START: b4,
+                    _BLOCK5_START: b5,
+                    _BLOCK6_START: b6,
+                }
 
-            return {
-                key: _f32(block_map[block_start], block_start, address)
-                for key, (block_start, address) in _R.items()
-            }
+                return {
+                    key: _f32(block_map[block_start], block_start, address)
+                    for key, (block_start, address) in _R.items()
+                }
 
-        except asyncio.TimeoutError as exc:
-            self._client = None
-            raise UpdateFailed("Modbus read timed out") from exc
-        except ModbusException as exc:
-            self._client = None
-            raise UpdateFailed(f"Modbus communication error: {exc}") from exc
-        except UpdateFailed:
-            raise
-        except Exception as exc:
-            self._client = None
-            raise UpdateFailed(f"Unexpected error polling SDM72D: {exc}") from exc
+            except asyncio.TimeoutError as exc:
+                self._client = None
+                raise UpdateFailed("Modbus read timed out") from exc
+            except ModbusException as exc:
+                self._client = None
+                raise UpdateFailed(f"Modbus communication error: {exc}") from exc
+            except UpdateFailed:
+                raise
+            except Exception as exc:
+                self._client = None
+                raise UpdateFailed(f"Unexpected error polling SDM72D: {exc}") from exc
 
     async def async_close(self) -> None:
         """Close the Modbus connection on integration unload."""

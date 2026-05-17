@@ -55,27 +55,30 @@ class SDM72DResetButton(ButtonEntity):
         )
 
     async def async_press(self) -> None:
-        try:
-            client = await self._coordinator._get_client()
-            slave = self._entry.data[CONF_SLAVE_ID]
-            slave_kwargs = {_SLAVE_KWARG: slave} if _SLAVE_KWARG else {}
+        async with self._coordinator._modbus_lock:
+            try:
+                client = await self._coordinator._get_client()
+                slave = self._entry.data[CONF_SLAVE_ID]
+                slave_kwargs = {_SLAVE_KWARG: slave} if _SLAVE_KWARG else {}
 
-            # Step 1: unlock KPPA with factory password (float 1000.0 → 2 registers)
-            raw = struct.pack(">f", _DEFAULT_PASSWORD)
-            words = list(struct.unpack(">HH", raw))
-            result = await client.write_registers(_REG_KPPA, words, **slave_kwargs)
-            if hasattr(result, "isError") and result.isError():
-                _LOGGER.error("SDM72D KPPA unlock failed: %s", result)
+                # Step 1: unlock KPPA with factory password (float 1000.0 → 2 registers)
+                raw = struct.pack(">f", _DEFAULT_PASSWORD)
+                words = list(struct.unpack(">HH", raw))
+                result = await client.write_registers(_REG_KPPA, words, **slave_kwargs)
+                if hasattr(result, "isError") and result.isError():
+                    _LOGGER.error("SDM72D KPPA unlock failed: %s", result)
+                    return
+
+                # Step 2: send reset command
+                result = await client.write_register(_REG_RESET, _VAL_RESET, **slave_kwargs)
+                if hasattr(result, "isError") and result.isError():
+                    _LOGGER.error("SDM72D reset command failed: %s", result)
+                    return
+
+                _LOGGER.info("SDM72D resettable energy counters reset")
+
+            except ModbusException as exc:
+                _LOGGER.error("SDM72D Modbus error during reset: %s", exc)
                 return
 
-            # Step 2: send reset command
-            result = await client.write_register(_REG_RESET, _VAL_RESET, **slave_kwargs)
-            if hasattr(result, "isError") and result.isError():
-                _LOGGER.error("SDM72D reset command failed: %s", result)
-                return
-
-            _LOGGER.info("SDM72D resettable energy counters reset")
-            await self._coordinator.async_request_refresh()
-
-        except ModbusException as exc:
-            _LOGGER.error("SDM72D Modbus error during reset: %s", exc)
+        await self._coordinator.async_request_refresh()

@@ -1,7 +1,11 @@
 """Config flow for the Eastron SDM72D integration."""
 from __future__ import annotations
 
+import logging
+
 import voluptuous as vol
+
+_LOGGER = logging.getLogger(__name__)
 from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
@@ -82,7 +86,8 @@ async def _test_connection(data: dict) -> str | None:
         return "cannot_connect"
     except ModbusException:
         return "cannot_connect"
-    except Exception:
+    except Exception as exc:
+        _LOGGER.exception("Unexpected error testing SDM72D connection: %s", exc)
         return "unknown"
     finally:
         client.close()

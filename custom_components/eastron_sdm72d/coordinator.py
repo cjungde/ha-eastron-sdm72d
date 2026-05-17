@@ -205,7 +205,7 @@ class SDM72DCoordinator(DataUpdateCoordinator[dict[str, float]]):
             # stalls mid-response (e.g. RS485 bus contention).
             async def read(address: int, count: int) -> list[int]:
                 result = await asyncio.wait_for(
-                    client.read_input_registers(address=address, count=count, slave=slave),
+                    client.read_input_registers(address, count, slave),
                     timeout=_MODBUS_TIMEOUT,
                 )
                 if hasattr(result, "isError") and result.isError():

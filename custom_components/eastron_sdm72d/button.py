@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 import struct
 
-from pymodbus.exceptions import ModbusException
+from pymodbus.exceptions import ModbusException, ModbusIOException
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
@@ -69,11 +69,15 @@ class SDM72DResetButton(ButtonEntity):
                     _LOGGER.error("SDM72D KPPA unlock failed: %s", result)
                     return
 
-                # Step 2: send reset command
-                result = await client.write_register(_REG_RESET, _VAL_RESET, **slave_kwargs)
-                if hasattr(result, "isError") and result.isError():
-                    _LOGGER.error("SDM72D reset command failed: %s", result)
-                    return
+                # Step 2: send reset command via FC16 (write multiple registers).
+                # 0xF010 is write-only — the device executes the reset without
+                # sending a Modbus response, so a ModbusIOException here is expected.
+                try:
+                    result = await client.write_registers(_REG_RESET, [_VAL_RESET], **slave_kwargs)
+                    if hasattr(result, "isError") and result.isError():
+                        _LOGGER.warning("SDM72D reset returned Modbus error: %s", result)
+                except ModbusIOException:
+                    pass  # write-only register sends no response — reset was executed
 
                 _LOGGER.info("SDM72D resettable energy counters reset")
 

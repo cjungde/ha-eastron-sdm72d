@@ -1,9 +1,10 @@
 """Button platform for Eastron SDM72D — reset resettable energy counters."""
 from __future__ import annotations
 
-import asyncio
 import logging
 import struct
+
+from pymodbus.exceptions import ModbusException
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
@@ -24,8 +25,6 @@ _DEFAULT_PASSWORD = 1000.0  # factory default; stored as IEEE-754 float (2 regis
 # Holding register 0xF010: write 0x0003 to reset all resettable energy counters.
 _REG_RESET = 0xF010
 _VAL_RESET = 0x0003
-
-_TIMEOUT = 10
 
 
 async def async_setup_entry(
@@ -56,23 +55,27 @@ class SDM72DResetButton(ButtonEntity):
         )
 
     async def async_press(self) -> None:
-        client = await self._coordinator._get_client()
-        slave = self._entry.data[CONF_SLAVE_ID]
-        slave_kwargs = {_SLAVE_KWARG: slave} if _SLAVE_KWARG else {}
+        try:
+            client = await self._coordinator._get_client()
+            slave = self._entry.data[CONF_SLAVE_ID]
+            slave_kwargs = {_SLAVE_KWARG: slave} if _SLAVE_KWARG else {}
 
-        # Step 1: unlock KPPA with factory password (float 1000.0 → 2 registers)
-        raw = struct.pack(">f", _DEFAULT_PASSWORD)
-        words = list(struct.unpack(">HH", raw))
-        await asyncio.wait_for(
-            client.write_registers(_REG_KPPA, words, **slave_kwargs),
-            timeout=_TIMEOUT,
-        )
+            # Step 1: unlock KPPA with factory password (float 1000.0 → 2 registers)
+            raw = struct.pack(">f", _DEFAULT_PASSWORD)
+            words = list(struct.unpack(">HH", raw))
+            result = await client.write_registers(_REG_KPPA, words, **slave_kwargs)
+            if hasattr(result, "isError") and result.isError():
+                _LOGGER.error("SDM72D KPPA unlock failed: %s", result)
+                return
 
-        # Step 2: send reset command
-        await asyncio.wait_for(
-            client.write_register(_REG_RESET, _VAL_RESET, **slave_kwargs),
-            timeout=_TIMEOUT,
-        )
+            # Step 2: send reset command
+            result = await client.write_register(_REG_RESET, _VAL_RESET, **slave_kwargs)
+            if hasattr(result, "isError") and result.isError():
+                _LOGGER.error("SDM72D reset command failed: %s", result)
+                return
 
-        _LOGGER.info("SDM72D resettable energy counters reset")
-        await self._coordinator.async_request_refresh()
+            _LOGGER.info("SDM72D resettable energy counters reset")
+            await self._coordinator.async_request_refresh()
+
+        except ModbusException as exc:
+            _LOGGER.error("SDM72D Modbus error during reset: %s", exc)

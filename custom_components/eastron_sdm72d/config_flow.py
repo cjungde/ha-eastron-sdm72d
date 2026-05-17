@@ -75,7 +75,7 @@ async def _test_connection(data: dict) -> str | None:
     """Try to connect and read one register. Returns an error key or None on success."""
     import asyncio
     from pymodbus.exceptions import ModbusException
-    from .coordinator import _build_client
+    from .coordinator import _build_client, _SLAVE_KWARG
 
     client = _build_client(data)
     try:
@@ -83,8 +83,11 @@ async def _test_connection(data: dict) -> str | None:
         if not client.connected:
             return "cannot_connect"
 
+        kwargs: dict = {"count": 2}
+        if _SLAVE_KWARG:
+            kwargs[_SLAVE_KWARG] = data[CONF_SLAVE_ID]
         result = await asyncio.wait_for(
-            client.read_input_registers(0x0034, count=2, unit=data[CONF_SLAVE_ID]),
+            client.read_input_registers(0x0034, **kwargs),
             timeout=_TEST_TIMEOUT,
         )
         if hasattr(result, "isError") and result.isError():

@@ -27,6 +27,30 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+
+def _detect_slave_kwarg() -> str | None:
+    """Return the keyword name used by this pymodbus version for the slave/unit ID.
+
+    Different pymodbus versions use 'slave' (3.x), 'unit' (2.x), or neither (4.x+
+    where the ID is set on the client). Detected once at import time via inspection.
+    """
+    import inspect
+    try:
+        from pymodbus.client import AsyncModbusTcpClient
+        params = inspect.signature(AsyncModbusTcpClient.read_input_registers).parameters
+        if "slave" in params:
+            return "slave"
+        if "unit" in params:
+            return "unit"
+        return None
+    except Exception:
+        return "slave"
+
+
+_SLAVE_KWARG: str | None = _detect_slave_kwarg()
+_LOGGER.debug("pymodbus slave ID keyword: %s", _SLAVE_KWARG)
+
+
 # SDM72D-M-2 input register map — all values are 32-bit IEEE 754 floats (2 registers each).
 # Function code 04. Max 30 parameters (60 registers) per request.
 #
@@ -204,8 +228,11 @@ class SDM72DCoordinator(DataUpdateCoordinator[dict[str, float]]):
             # asyncio.wait_for enforces a hard deadline per read in case the device
             # stalls mid-response (e.g. RS485 bus contention).
             async def read(address: int, count: int) -> list[int]:
+                kwargs: dict = {"count": count}
+                if _SLAVE_KWARG:
+                    kwargs[_SLAVE_KWARG] = slave
                 result = await asyncio.wait_for(
-                    client.read_input_registers(address, count=count, unit=slave),
+                    client.read_input_registers(address, **kwargs),
                     timeout=_MODBUS_TIMEOUT,
                 )
                 if hasattr(result, "isError") and result.isError():

@@ -4,21 +4,20 @@ from __future__ import annotations
 import logging
 
 import voluptuous as vol
-
-_LOGGER = logging.getLogger(__name__)
-
-
-def _validate_slave_id(value: str) -> int:
-    try:
-        v = int(value)
-    except (ValueError, TypeError):
-        raise vol.Invalid("Must be a number between 1 and 247")
-    if not 1 <= v <= 247:
-        raise vol.Invalid("Must be between 1 and 247")
-    return v
 from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
+from homeassistant.helpers.selector import (
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
+)
+
+_LOGGER = logging.getLogger(__name__)
+
+_SLAVE_ID_SELECTOR = NumberSelector(
+    NumberSelectorConfig(min=1, max=247, step=1, mode=NumberSelectorMode.BOX)
+)
 
 from .const import (
     DOMAIN,
@@ -50,7 +49,7 @@ def _schema_tcp(defaults: dict) -> vol.Schema:
         {
             vol.Required("host", default=defaults.get("host", "")): str,
             vol.Required("port", default=defaults.get("port", DEFAULT_PORT)): vol.All(int, vol.Range(min=1, max=65535)),
-            vol.Required(CONF_SLAVE_ID, default=str(defaults.get(CONF_SLAVE_ID, DEFAULT_SLAVE_ID))): _validate_slave_id,
+            vol.Required(CONF_SLAVE_ID, default=defaults.get(CONF_SLAVE_ID, DEFAULT_SLAVE_ID)): _SLAVE_ID_SELECTOR,
             vol.Required(CONF_SCAN_INTERVAL, default=defaults.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)): vol.All(int, vol.Range(min=5, max=3600)),
         }
     )
@@ -63,7 +62,7 @@ def _schema_rtu(defaults: dict) -> vol.Schema:
             vol.Required(CONF_BAUDRATE, default=defaults.get(CONF_BAUDRATE, DEFAULT_BAUDRATE)): vol.In([1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200]),
             vol.Required(CONF_PARITY, default=defaults.get(CONF_PARITY, DEFAULT_PARITY)): vol.In(["N", "E", "O"]),
             vol.Required(CONF_STOPBITS, default=defaults.get(CONF_STOPBITS, DEFAULT_STOPBITS)): vol.In([1, 2]),
-            vol.Required(CONF_SLAVE_ID, default=str(defaults.get(CONF_SLAVE_ID, DEFAULT_SLAVE_ID))): _validate_slave_id,
+            vol.Required(CONF_SLAVE_ID, default=defaults.get(CONF_SLAVE_ID, DEFAULT_SLAVE_ID)): _SLAVE_ID_SELECTOR,
             vol.Required(CONF_SCAN_INTERVAL, default=defaults.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)): vol.All(int, vol.Range(min=5, max=3600)),
         }
     )

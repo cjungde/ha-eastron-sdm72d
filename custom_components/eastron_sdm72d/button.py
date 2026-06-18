@@ -1,19 +1,19 @@
 """Button platform for Eastron SDM72D — reset resettable energy counters."""
+
 from __future__ import annotations
 
 import logging
 import struct
-
-from pymodbus.exceptions import ModbusException, ModbusIOException
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from pymodbus.exceptions import ModbusException, ModbusIOException
 
-from .const import DOMAIN, CONF_SLAVE_ID
-from .coordinator import SDM72DCoordinator, _SLAVE_KWARG
+from .const import CONF_SLAVE_ID, DOMAIN
+from .coordinator import _SLAVE_KWARG, SDM72DCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -73,9 +73,13 @@ class SDM72DResetButton(ButtonEntity):
                 # 0xF010 is write-only — the device executes the reset without
                 # sending a Modbus response, so a ModbusIOException here is expected.
                 try:
-                    result = await client.write_registers(_REG_RESET, [_VAL_RESET], **slave_kwargs)
+                    result = await client.write_registers(
+                        _REG_RESET, [_VAL_RESET], **slave_kwargs
+                    )
                     if hasattr(result, "isError") and result.isError():
-                        _LOGGER.warning("SDM72D reset returned Modbus error: %s", result)
+                        _LOGGER.warning(
+                            "SDM72D reset returned Modbus error: %s", result
+                        )
                 except ModbusIOException:
                     pass  # write-only register sends no response — reset was executed
 

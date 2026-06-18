@@ -1,10 +1,11 @@
 """DataUpdateCoordinator for the Eastron SDM72D."""
+
 from __future__ import annotations
 
 import asyncio
+from datetime import timedelta
 import logging
 import struct
-from datetime import timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -12,17 +13,17 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import (
-    DOMAIN,
-    CONF_CONNECTION_TYPE,
-    CONF_SLAVE_ID,
-    CONF_SERIAL_PORT,
     CONF_BAUDRATE,
+    CONF_CONNECTION_TYPE,
     CONF_PARITY,
-    CONF_STOPBITS,
     CONF_SCAN_INTERVAL,
+    CONF_SERIAL_PORT,
+    CONF_SLAVE_ID,
+    CONF_STOPBITS,
     CONNECTION_TCP,
     CONNECTION_TCP_RTU,
     DEFAULT_SCAN_INTERVAL,
+    DOMAIN,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -35,8 +36,10 @@ def _detect_slave_kwarg() -> str | None:
     where the ID is set on the client). Detected once at import time via inspection.
     """
     import inspect
+
     try:
         from pymodbus.client import AsyncModbusTcpClient
+
         params = inspect.signature(AsyncModbusTcpClient.read_input_registers).parameters
         if "slave" in params:
             return "slave"
@@ -61,51 +64,53 @@ _LOGGER.debug("pymodbus slave ID keyword: %s", _SLAVE_KWARG)
 # NOTE: 0x0030 is "Sum of line currents" (NOT neutral current).
 #       Neutral current is at 0x00E0 per the SDM72D-M-2 datasheet.
 
-_BLOCK1_START = 0x0000   # 9 parameters (18 registers): per-phase V, I, P
+_BLOCK1_START = 0x0000  # 9 parameters (18 registers): per-phase V, I, P
 _BLOCK1_COUNT = 18
 
-_BLOCK2_START = 0x0034   # 12 parameters (24 registers): total P/VA/VAr, PF, freq, energy
+_BLOCK2_START = 0x0034  # 12 parameters (24 registers): total P/VA/VAr, PF, freq, energy
 _BLOCK2_COUNT = 24
 
-_BLOCK3_START = 0x00E0   # 1 parameter (2 registers): neutral current
+_BLOCK3_START = 0x00E0  # 1 parameter (2 registers): neutral current
 _BLOCK3_COUNT = 2
 
-_BLOCK4_START = 0x002A   # 1 parameter (2 registers): average line-to-neutral voltage
+_BLOCK4_START = 0x002A  # 1 parameter (2 registers): average line-to-neutral voltage
 _BLOCK4_COUNT = 2
 
 # Block 5 covers: total active energy (0x0156), resettable import (0x0184),
 # resettable export (0x0186), and net kWh (0x018C).
 # Reading as two sub-blocks is more efficient than one large sparse read.
-_BLOCK5_START = 0x0156   # 1 parameter (2 registers): total active energy (import+export)
+_BLOCK5_START = 0x0156  # 1 parameter (2 registers): total active energy (import+export)
 _BLOCK5_COUNT = 2
 
-_BLOCK6_START = 0x0184   # 3 parameters (10 registers): resettable import, export, net kWh
-_BLOCK6_COUNT = 10       # 0x0184–0x018D  (offsets: import=0, export=2, net=8)
+_BLOCK6_START = (
+    0x0184  # 3 parameters (10 registers): resettable import, export, net kWh
+)
+_BLOCK6_COUNT = 10  # 0x0184–0x018D  (offsets: import=0, export=2, net=8)
 
 # (block_start, absolute_register_address) for each data key
 _R: dict[str, tuple[int, int]] = {
-    "voltage_l1":           (_BLOCK1_START, 0x0000),
-    "voltage_l2":           (_BLOCK1_START, 0x0002),
-    "voltage_l3":           (_BLOCK1_START, 0x0004),
-    "current_l1":           (_BLOCK1_START, 0x0006),
-    "current_l2":           (_BLOCK1_START, 0x0008),
-    "current_l3":           (_BLOCK1_START, 0x000A),
-    "power_l1":             (_BLOCK1_START, 0x000C),
-    "power_l2":             (_BLOCK1_START, 0x000E),
-    "power_l3":             (_BLOCK1_START, 0x0010),
-    "avg_voltage":          (_BLOCK4_START, 0x002A),
-    "total_power":          (_BLOCK2_START, 0x0034),
-    "total_va":             (_BLOCK2_START, 0x0038),
-    "total_var":            (_BLOCK2_START, 0x003C),
-    "power_factor":         (_BLOCK2_START, 0x003E),
-    "frequency":            (_BLOCK2_START, 0x0046),
-    "import_energy":        (_BLOCK2_START, 0x0048),
-    "export_energy":        (_BLOCK2_START, 0x004A),
-    "neutral_current":      (_BLOCK3_START, 0x00E0),
-    "total_energy":         (_BLOCK5_START, 0x0156),
-    "resettable_import":    (_BLOCK6_START, 0x0184),
-    "resettable_export":    (_BLOCK6_START, 0x0186),
-    "net_energy":           (_BLOCK6_START, 0x018C),
+    "voltage_l1": (_BLOCK1_START, 0x0000),
+    "voltage_l2": (_BLOCK1_START, 0x0002),
+    "voltage_l3": (_BLOCK1_START, 0x0004),
+    "current_l1": (_BLOCK1_START, 0x0006),
+    "current_l2": (_BLOCK1_START, 0x0008),
+    "current_l3": (_BLOCK1_START, 0x000A),
+    "power_l1": (_BLOCK1_START, 0x000C),
+    "power_l2": (_BLOCK1_START, 0x000E),
+    "power_l3": (_BLOCK1_START, 0x0010),
+    "avg_voltage": (_BLOCK4_START, 0x002A),
+    "total_power": (_BLOCK2_START, 0x0034),
+    "total_va": (_BLOCK2_START, 0x0038),
+    "total_var": (_BLOCK2_START, 0x003C),
+    "power_factor": (_BLOCK2_START, 0x003E),
+    "frequency": (_BLOCK2_START, 0x0046),
+    "import_energy": (_BLOCK2_START, 0x0048),
+    "export_energy": (_BLOCK2_START, 0x004A),
+    "neutral_current": (_BLOCK3_START, 0x00E0),
+    "total_energy": (_BLOCK5_START, 0x0156),
+    "resettable_import": (_BLOCK6_START, 0x0184),
+    "resettable_export": (_BLOCK6_START, 0x0186),
+    "net_energy": (_BLOCK6_START, 0x018C),
 }
 
 # Seconds before a connect or read attempt is abandoned
@@ -130,7 +135,7 @@ def _f32(registers: list[int], block_start: int, address: int) -> float:
 
 def _build_client(data: dict) -> Any:
     """Instantiate the appropriate pymodbus async client from config entry data."""
-    from pymodbus.client import AsyncModbusTcpClient, AsyncModbusSerialClient
+    from pymodbus.client import AsyncModbusSerialClient, AsyncModbusTcpClient
 
     conn_type = data.get(CONF_CONNECTION_TYPE, CONNECTION_TCP)
 
@@ -147,6 +152,7 @@ def _build_client(data: dict) -> Any:
         # but switch to RTU framing instead of the default MBAP/TCP framing.
         try:
             from pymodbus.framer import FramerType
+
             framer = FramerType.RTU
         except ImportError:
             framer = "rtu"
@@ -161,6 +167,7 @@ def _build_client(data: dict) -> Any:
     # serial clients but being explicit avoids any version-specific surprises.
     try:
         from pymodbus.framer import FramerType
+
         framer = FramerType.RTU
     except ImportError:
         framer = "rtu"  # pymodbus < 3.4 string fallback
@@ -207,7 +214,7 @@ class SDM72DCoordinator(DataUpdateCoordinator[dict[str, float]]):
         client = _build_client(self._entry.data)
         try:
             await asyncio.wait_for(client.connect(), timeout=_MODBUS_TIMEOUT)
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             client.close()
             raise UpdateFailed("Connection to SDM72D timed out") from exc
 
@@ -262,7 +269,7 @@ class SDM72DCoordinator(DataUpdateCoordinator[dict[str, float]]):
                     for key, (block_start, address) in _R.items()
                 }
 
-            except asyncio.TimeoutError as exc:
+            except TimeoutError as exc:
                 self._client = None
                 raise UpdateFailed("Modbus read timed out") from exc
             except ModbusException as exc:

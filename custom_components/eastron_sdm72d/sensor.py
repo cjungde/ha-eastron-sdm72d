@@ -1,4 +1,5 @@
 """Sensor platform for the Eastron SDM72D."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -31,13 +32,15 @@ from .coordinator import SDM72DCoordinator
 @dataclass(frozen=True, kw_only=True)
 class SDM72DSensorDescription(SensorEntityDescription):
     """Extends SensorEntityDescription with the coordinator data key."""
+
     data_key: str
 
 
 SENSOR_DESCRIPTIONS: tuple[SDM72DSensorDescription, ...] = (
     # ── Phase voltages (L-N) ──────────────────────────────────────────────────
     SDM72DSensorDescription(
-        key="voltage_l1", data_key="voltage_l1",
+        key="voltage_l1",
+        data_key="voltage_l1",
         name="Voltage (L1)",
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
@@ -45,7 +48,8 @@ SENSOR_DESCRIPTIONS: tuple[SDM72DSensorDescription, ...] = (
         suggested_display_precision=1,
     ),
     SDM72DSensorDescription(
-        key="voltage_l2", data_key="voltage_l2",
+        key="voltage_l2",
+        data_key="voltage_l2",
         name="Voltage (L2)",
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
@@ -53,7 +57,8 @@ SENSOR_DESCRIPTIONS: tuple[SDM72DSensorDescription, ...] = (
         suggested_display_precision=1,
     ),
     SDM72DSensorDescription(
-        key="voltage_l3", data_key="voltage_l3",
+        key="voltage_l3",
+        data_key="voltage_l3",
         name="Voltage (L3)",
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
@@ -62,7 +67,8 @@ SENSOR_DESCRIPTIONS: tuple[SDM72DSensorDescription, ...] = (
     ),
     # ── Phase currents ────────────────────────────────────────────────────────
     SDM72DSensorDescription(
-        key="current_l1", data_key="current_l1",
+        key="current_l1",
+        data_key="current_l1",
         name="Current (L1)",
         device_class=SensorDeviceClass.CURRENT,
         state_class=SensorStateClass.MEASUREMENT,
@@ -70,7 +76,8 @@ SENSOR_DESCRIPTIONS: tuple[SDM72DSensorDescription, ...] = (
         suggested_display_precision=2,
     ),
     SDM72DSensorDescription(
-        key="current_l2", data_key="current_l2",
+        key="current_l2",
+        data_key="current_l2",
         name="Current (L2)",
         device_class=SensorDeviceClass.CURRENT,
         state_class=SensorStateClass.MEASUREMENT,
@@ -78,7 +85,8 @@ SENSOR_DESCRIPTIONS: tuple[SDM72DSensorDescription, ...] = (
         suggested_display_precision=2,
     ),
     SDM72DSensorDescription(
-        key="current_l3", data_key="current_l3",
+        key="current_l3",
+        data_key="current_l3",
         name="Current (L3)",
         device_class=SensorDeviceClass.CURRENT,
         state_class=SensorStateClass.MEASUREMENT,
@@ -87,7 +95,8 @@ SENSOR_DESCRIPTIONS: tuple[SDM72DSensorDescription, ...] = (
     ),
     # ── Per-phase active power ────────────────────────────────────────────────
     SDM72DSensorDescription(
-        key="power_l1", data_key="power_l1",
+        key="power_l1",
+        data_key="power_l1",
         name="Active Power (L1)",
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -95,7 +104,8 @@ SENSOR_DESCRIPTIONS: tuple[SDM72DSensorDescription, ...] = (
         suggested_display_precision=1,
     ),
     SDM72DSensorDescription(
-        key="power_l2", data_key="power_l2",
+        key="power_l2",
+        data_key="power_l2",
         name="Active Power (L2)",
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -103,7 +113,8 @@ SENSOR_DESCRIPTIONS: tuple[SDM72DSensorDescription, ...] = (
         suggested_display_precision=1,
     ),
     SDM72DSensorDescription(
-        key="power_l3", data_key="power_l3",
+        key="power_l3",
+        data_key="power_l3",
         name="Active Power (L3)",
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -112,7 +123,8 @@ SENSOR_DESCRIPTIONS: tuple[SDM72DSensorDescription, ...] = (
     ),
     # ── Total system measurements ─────────────────────────────────────────────
     SDM72DSensorDescription(
-        key="total_power", data_key="total_power",
+        key="total_power",
+        data_key="total_power",
         name="Active Power",
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -120,7 +132,8 @@ SENSOR_DESCRIPTIONS: tuple[SDM72DSensorDescription, ...] = (
         suggested_display_precision=1,
     ),
     SDM72DSensorDescription(
-        key="total_va", data_key="total_va",
+        key="total_va",
+        data_key="total_va",
         name="Apparent Power",
         device_class=SensorDeviceClass.APPARENT_POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -128,7 +141,8 @@ SENSOR_DESCRIPTIONS: tuple[SDM72DSensorDescription, ...] = (
         suggested_display_precision=1,
     ),
     SDM72DSensorDescription(
-        key="total_var", data_key="total_var",
+        key="total_var",
+        data_key="total_var",
         name="Reactive Power",
         device_class=SensorDeviceClass.REACTIVE_POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -136,7 +150,8 @@ SENSOR_DESCRIPTIONS: tuple[SDM72DSensorDescription, ...] = (
         suggested_display_precision=1,
     ),
     SDM72DSensorDescription(
-        key="power_factor", data_key="power_factor",
+        key="power_factor",
+        data_key="power_factor",
         name="Power Factor",
         device_class=SensorDeviceClass.POWER_FACTOR,
         state_class=SensorStateClass.MEASUREMENT,
@@ -144,7 +159,8 @@ SENSOR_DESCRIPTIONS: tuple[SDM72DSensorDescription, ...] = (
         suggested_display_precision=2,
     ),
     SDM72DSensorDescription(
-        key="frequency", data_key="frequency",
+        key="frequency",
+        data_key="frequency",
         name="Frequency",
         device_class=SensorDeviceClass.FREQUENCY,
         state_class=SensorStateClass.MEASUREMENT,
@@ -153,7 +169,8 @@ SENSOR_DESCRIPTIONS: tuple[SDM72DSensorDescription, ...] = (
     ),
     # ── Energy counters ───────────────────────────────────────────────────────
     SDM72DSensorDescription(
-        key="import_energy", data_key="import_energy",
+        key="import_energy",
+        data_key="import_energy",
         name="Import Energy",
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -161,7 +178,8 @@ SENSOR_DESCRIPTIONS: tuple[SDM72DSensorDescription, ...] = (
         suggested_display_precision=2,
     ),
     SDM72DSensorDescription(
-        key="export_energy", data_key="export_energy",
+        key="export_energy",
+        data_key="export_energy",
         name="Export Energy",
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -172,7 +190,8 @@ SENSOR_DESCRIPTIONS: tuple[SDM72DSensorDescription, ...] = (
     # NOTE: 0x0030 = "Sum of line currents" — NOT neutral current.
     #       Neutral current is at 0x00E0 per SDM72D-M-2 datasheet.
     SDM72DSensorDescription(
-        key="neutral_current", data_key="neutral_current",
+        key="neutral_current",
+        data_key="neutral_current",
         name="Neutral Current",
         device_class=SensorDeviceClass.CURRENT,
         state_class=SensorStateClass.MEASUREMENT,
@@ -181,7 +200,8 @@ SENSOR_DESCRIPTIONS: tuple[SDM72DSensorDescription, ...] = (
     ),
     # ── Average line-to-neutral voltage (0x002A) ──────────────────────────────
     SDM72DSensorDescription(
-        key="avg_voltage", data_key="avg_voltage",
+        key="avg_voltage",
+        data_key="avg_voltage",
         name="Average Voltage",
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
@@ -190,7 +210,8 @@ SENSOR_DESCRIPTIONS: tuple[SDM72DSensorDescription, ...] = (
     ),
     # ── Total active energy import+export (0x0156) — for HA Energy Dashboard ──
     SDM72DSensorDescription(
-        key="total_energy", data_key="total_energy",
+        key="total_energy",
+        data_key="total_energy",
         name="Total Energy",
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -199,7 +220,8 @@ SENSOR_DESCRIPTIONS: tuple[SDM72DSensorDescription, ...] = (
     ),
     # ── Resettable import / export counters (0x0184, 0x0186) ─────────────────
     SDM72DSensorDescription(
-        key="resettable_import", data_key="resettable_import",
+        key="resettable_import",
+        data_key="resettable_import",
         name="Resettable Import Energy",
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -207,7 +229,8 @@ SENSOR_DESCRIPTIONS: tuple[SDM72DSensorDescription, ...] = (
         suggested_display_precision=2,
     ),
     SDM72DSensorDescription(
-        key="resettable_export", data_key="resettable_export",
+        key="resettable_export",
+        data_key="resettable_export",
         name="Resettable Export Energy",
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -217,7 +240,8 @@ SENSOR_DESCRIPTIONS: tuple[SDM72DSensorDescription, ...] = (
     # ── Net energy balance (0x018C) ───────────────────────────────────────────
     # Can go negative (export > import), so TOTAL not TOTAL_INCREASING.
     SDM72DSensorDescription(
-        key="net_energy", data_key="net_energy",
+        key="net_energy",
+        data_key="net_energy",
         name="Net Energy",
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL,

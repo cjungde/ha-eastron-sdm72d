@@ -29,6 +29,12 @@
           "slave_id": "Slave-ID (Geräteadresse)",
           "scan_interval": "Abfrageintervall (Sekunden)"
         }
+      },
+      "reconfigure": {
+        "title": "Eastron SDM72D – Neu konfigurieren",
+        "data": {
+          "connection_type": "Verbindungstyp"
+        }
       }
     },
     "error": {
@@ -39,41 +45,6 @@
     "abort": {
       "already_configured": "Dieses Gerät ist bereits konfiguriert.",
       "reconfigure_successful": "Konfiguration erfolgreich aktualisiert."
-    }
-  },
-  "reconfigure": {
-    "step": {
-      "reconfigure": {
-        "title": "Eastron SDM72D – Neu konfigurieren",
-        "data": {
-          "connection_type": "Verbindungstyp"
-        }
-      },
-      "tcp": {
-        "title": "Eastron SDM72D – Netzwerkverbindung",
-        "data": {
-          "host": "IP-Adresse / Hostname",
-          "port": "TCP-Port",
-          "slave_id": "Slave-ID (Geräteadresse)",
-          "scan_interval": "Abfrageintervall (Sekunden)"
-        }
-      },
-      "rtu": {
-        "title": "Eastron SDM72D – Modbus RTU (RS485)",
-        "data": {
-          "serial_port": "Serieller Port",
-          "baudrate": "Baudrate",
-          "parity": "Parität",
-          "stopbits": "Stoppbits",
-          "slave_id": "Slave-ID (Geräteadresse)",
-          "scan_interval": "Abfrageintervall (Sekunden)"
-        }
-      }
-    },
-    "error": {
-      "cannot_connect": "Verbindung zum Gerät fehlgeschlagen.",
-      "invalid_slave_id": "Slave-ID nicht erreichbar – Geräteadresse prüfen.",
-      "unknown": "Unbekannter Fehler."
     }
   },
   "options": {

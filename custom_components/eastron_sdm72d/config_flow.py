@@ -2,18 +2,23 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from homeassistant import config_entries
-from homeassistant.core import callback
+from homeassistant.components.modbus import async_get_temporary_unit
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.selector import (
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
 )
+from modbus_connection.exceptions import IllegalDataAddressError, ModbusError
 import voluptuous as vol
 
+from .connection import params_from_entry_data
 from .const import (
     CONF_BAUDRATE,
     CONF_CONNECTION_TYPE,
@@ -96,40 +101,38 @@ def _schema_rtu(defaults: dict) -> vol.Schema:
 _TEST_TIMEOUT = 10  # seconds
 
 
-async def _test_connection(data: dict) -> str | None:
-    """Try to connect and read one register. Returns an error key or None on success."""
-    import asyncio
+async def _test_connection(hass: HomeAssistant, data: dict) -> str | None:
+    """Read one register from the meter. Returns an error key, or None on success.
 
-    from pymodbus.exceptions import ModbusException
+    Holds a unit only for the duration of the check. The flow has no config
+    entry yet to tie a lasting hold to, so it borrows one: an existing shared
+    connection to the same device is reused and stays up, and a connection
+    opened for this check alone is closed again on the way out. Either way the
+    probe serializes with whatever else is already talking on that bus.
+    """
+    params = params_from_entry_data(data)
+    unit_id = int(data[CONF_SLAVE_ID])
 
-    from .coordinator import _SLAVE_KWARG, _build_client
-
-    client = _build_client(data)
     try:
-        await asyncio.wait_for(client.connect(), timeout=_TEST_TIMEOUT)
-        if not client.connected:
-            return "cannot_connect"
-
-        kwargs: dict = {"count": 2}
-        if _SLAVE_KWARG:
-            kwargs[_SLAVE_KWARG] = data[CONF_SLAVE_ID]
-        result = await asyncio.wait_for(
-            client.read_input_registers(0x0034, **kwargs),
-            timeout=_TEST_TIMEOUT,
-        )
-        if hasattr(result, "isError") and result.isError():
-            return "invalid_slave_id"
-        return None
-
-    except TimeoutError:
+        async with (
+            asyncio.timeout(_TEST_TIMEOUT),
+            async_get_temporary_unit(hass, params, unit_id) as unit,
+        ):
+            await unit.read_input_registers(0x0034, 2)
+    except IllegalDataAddressError:
+        # Something answered on the link, just not at this unit id.
+        return "invalid_slave_id"
+    except (ModbusError, TimeoutError):
         return "cannot_connect"
-    except ModbusException:
+    except HomeAssistantError:
+        # The device is already held over different link settings; one
+        # connection cannot honour two baud rates at once.
         return "cannot_connect"
-    except Exception as exc:
-        _LOGGER.exception("Unexpected error testing SDM72D connection: %s", exc)
+    except Exception:
+        _LOGGER.exception("Unexpected error testing the SDM72D connection")
         return "unknown"
-    finally:
-        client.close()
+
+    return None
 
 
 class SDM72DConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -153,7 +156,7 @@ class SDM72DConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         defaults = self._reconfigure_entry.data if self._reconfigure_entry else {}
         if user_input is not None:
             data = {CONF_CONNECTION_TYPE: self._connection_type, **user_input}
-            error = await _test_connection(data)
+            error = await _test_connection(self.hass, data)
             if error is None:
                 if self._reconfigure_entry:
                     return self.async_update_reload_and_abort(
@@ -181,7 +184,7 @@ class SDM72DConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         defaults = self._reconfigure_entry.data if self._reconfigure_entry else {}
         if user_input is not None:
             data = {CONF_CONNECTION_TYPE: CONNECTION_RTU, **user_input}
-            error = await _test_connection(data)
+            error = await _test_connection(self.hass, data)
             if error is None:
                 if self._reconfigure_entry:
                     return self.async_update_reload_and_abort(

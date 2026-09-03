@@ -1,12 +1,19 @@
 {
   "domain": "eastron_sdm72d",
   "name": "Eastron SDM72D",
-  "codeowners": ["@cjungde"],
+  "codeowners": [
+    "@cjungde"
+  ],
   "config_flow": true,
+  "dependencies": [
+    "modbus"
+  ],
   "documentation": "https://github.com/cjungde/ha-eastron-sdm72d",
   "integration_type": "device",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/cjungde/ha-eastron-sdm72d/issues",
-  "requirements": ["pymodbus>=3.4.0"],
-  "version": "1.1.1"
+  "requirements": [
+    "eastron-sdm-modbus==0.1.0a1"
+  ],
+  "version": "2.0.0"
 }

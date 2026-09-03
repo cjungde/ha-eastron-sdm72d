@@ -24,8 +24,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
-        coordinator: SDM72DCoordinator = hass.data[DOMAIN].pop(entry.entry_id)
-        await coordinator.async_close()
+        # The shared connection closes itself when its last unit holder unloads,
+        # so there is no client of our own left to close here.
+        hass.data[DOMAIN].pop(entry.entry_id)
     return unloaded
 
 

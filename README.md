@@ -24,6 +24,11 @@ Die Integration erstellt ein Gerät **E72d** mit folgenden Sensoren – die Enti
 | `sensor.e72d_stromstarke_l3` | Stromstärke L3 | A |
 | `sensor.e72d_frequenz` | Netzfrequenz | Hz |
 
+## Voraussetzungen
+
+* **Home Assistant 2026.9 oder neuer.** Die Integration bezieht ihre Modbus-Verbindung über `async_get_unit` der `modbus`-Integration und teilt sie sich dadurch mit anderen Integrationen am selben Bus. Diese API gibt es erst ab 2026.9.
+* Ab Version 2.0.0 wird die Geräte-Bibliothek [`eastron-sdm-modbus`](https://github.com/cjungde/eastron-sdm-modbus) benötigt; Home Assistant installiert sie beim Einrichten selbst.
+
 ## Installation via HACS
 
 1. HACS → **Integrations** → ⋮ → **Custom repositories**

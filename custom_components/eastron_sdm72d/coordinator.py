@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import timedelta
 import logging
 
-from eastron_sdm_modbus import SDM72DMeter
 from homeassistant.components.modbus import async_get_unit
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -19,6 +18,7 @@ from .const import (
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
 )
+from .meter import SDM72DMeter
 
 _LOGGER = logging.getLogger(__name__)
 

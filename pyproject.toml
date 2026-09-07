@@ -13,4 +13,6 @@ ignore = ["E501"]
 force-sort-within-sections = true
 
 [tool.pytest.ini_options]
+# The meter tests are async; the vendored suite was written for auto mode.
+asyncio_mode = "auto"
 testpaths = ["tests"]

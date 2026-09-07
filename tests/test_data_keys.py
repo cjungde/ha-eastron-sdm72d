@@ -92,3 +92,31 @@ def test_the_coordinator_publishes_exactly_those_keys() -> None:
 def test_data_keys_has_no_duplicates() -> None:
     keys = _data_keys()
     assert len(keys) == len(set(keys))
+
+
+def _model_fields() -> list[str]:
+    """The measurement names declared on the SDM72D component in model.py."""
+    fields: list[str] = []
+    for node in ast.walk(_module("model")):
+        if (
+            isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+            and isinstance(node.value, ast.Call)
+            and isinstance(node.value.func, ast.Name)
+            and node.value.func.id == "float32"
+        ):
+            fields.append(node.targets[0].id)
+    return fields
+
+
+def test_the_register_model_declares_exactly_those_names() -> None:
+    """The coordinator reads each key straight off the measurement object.
+
+    ``DATA_KEYS`` is used as ``getattr(measurements, key)``, so a field renamed
+    in model.py does not fail to import — it fails at runtime, once, on the
+    first poll after an upgrade. Checking the two lists against each other is
+    only possible now that the register model lives in the integration rather
+    than in a separate distribution.
+    """
+    assert set(_model_fields()) == PUBLISHED_KEYS

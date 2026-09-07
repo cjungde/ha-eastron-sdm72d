@@ -1,0 +1,98 @@
+{#-
+  Compare the production integration against the shadow copy, measurement by
+  measurement. Paste into Developer Tools -> Template; it needs no token and
+  no files on the Home Assistant box.
+
+  What it is for: the shadow reads the meter through the device library's
+  register planner, the production entry through the hand-wired blocks of
+  v1.1.1. A planner that cuts the sparse address map into different blocks can
+  return values that are plausible but shifted by a register or two, and that
+  failure is silent -- it lands in the statistics looking like data. Reading
+  both at once and diffing them is what makes it loud.
+
+  Reading the output: the two sides poll at different intervals (5 s against
+  300 s), so the shadow's numbers lag by up to five minutes. Live power
+  therefore never matches exactly and is not supposed to. Tolerances are set
+  for that lag -- wide where a quantity is volatile, tight where it must not
+  move -- and the age of each sample is printed so a large delta can be judged
+  against how stale the reading is.
+
+  Apparent and reactive power carry a deliberately loose 50 %: at standby they
+  are dominated by a reactive component that swings faster than the shadow
+  samples. They stay in the table rather than being dropped, because an
+  outright swap of the two registers would still exceed even this limit.
+
+  One failing live-power row during a load change is noise. A failing energy
+  counter, a failing frequency, or the same row failing across several runs is
+  not.
+
+  Rows are collected into a list and joined at the end. Emitting them inside
+  the loop looks simpler but loses the line breaks to whitespace control.
+-#}
+{%- set prod = 'sensor.sdm72d_' -%}
+{%- set test = 'sensor.sdm72d_test_' -%}
+
+{#- (key, absolute tolerance, relative tolerance) -#}
+{%- set checks = [
+  ('voltage_l1',               1.0,   0.0),
+  ('voltage_l2',               1.0,   0.0),
+  ('voltage_l3',               1.0,   0.0),
+  ('average_voltage',          1.0,   0.0),
+  ('current_l1',               0.05,  0.10),
+  ('current_l2',               0.05,  0.10),
+  ('current_l3',               0.05,  0.10),
+  ('neutral_current',          0.05,  0.10),
+  ('active_power_l1',          5.0,   0.15),
+  ('active_power_l2',          5.0,   0.15),
+  ('active_power_l3',          5.0,   0.15),
+  ('active_power',            10.0,   0.15),
+  ('apparent_power',          20.0,   0.50),
+  ('reactive_power',          20.0,   0.50),
+  ('power_factor',             0.05,  0.0),
+  ('frequency',                0.05,  0.0),
+  ('import_energy',            0.01,  0.0),
+  ('export_energy',            0.01,  0.0),
+  ('total_energy',             0.01,  0.0),
+  ('resettable_import_energy', 0.01,  0.0),
+  ('resettable_export_energy', 0.01,  0.0),
+  ('net_energy',               0.01,  0.0)
+] -%}
+
+{%- set ns = namespace(rows=[], fails=[], missing=[], ok=0) -%}
+{%- for key, abs_tol, rel_tol in checks -%}
+  {%- set pe = prod ~ key -%}
+  {%- set te = test ~ key -%}
+  {%- if not has_value(pe) or not has_value(te) -%}
+    {%- set ns.missing = ns.missing + [key] -%}
+    {%- set ns.rows = ns.rows + ['%-26s %-14s %-14s %-11s %s' | format(
+         key, states(pe), states(te), '-', 'KEIN WERT')] -%}
+  {%- else -%}
+    {%- set p = states(pe) | float -%}
+    {%- set t = states(te) | float -%}
+    {%- set d = p - t -%}
+    {%- set limit = [abs_tol, rel_tol * [p | abs, t | abs] | max] | max -%}
+    {%- set good = (d | abs) <= limit -%}
+    {%- if good -%}
+      {%- set ns.ok = ns.ok + 1 -%}
+    {%- else -%}
+      {%- set ns.fails = ns.fails + [key] -%}
+    {%- endif -%}
+    {%- set ns.rows = ns.rows + ['%-26s %-14s %-14s %-11s %s' | format(
+         key, p, t, d | round(4),
+         'ok' if good else 'ABWEICHUNG (Grenze ' ~ limit | round(3) ~ ')')] -%}
+  {%- endif -%}
+{%- endfor -%}
+
+{%- set p_age = (now() - states.sensor.sdm72d_active_power.last_updated).total_seconds() | round(0) -%}
+{%- set t_age = (now() - states.sensor.sdm72d_test_active_power.last_updated).total_seconds() | round(0) -%}
+{%- set load = states('sensor.sdm72d_active_power') | float(0) -%}
+{{ '%-26s %-14s %-14s %-11s %s' | format('Messgroesse', 'produktiv', 'Test', 'Delta', 'Status') }}
+{{ '-' * 88 }}
+{{ ns.rows | join('\n') }}
+{{ '-' * 88 }}
+{{ ns.ok }} von {{ checks | count }} innerhalb der Toleranz.
+{% if ns.fails %}Auffaellig: {{ ns.fails | join(', ') }}
+{% endif %}{% if ns.missing %}Ohne Wert: {{ ns.missing | join(', ') }}
+{% endif %}Alter der Stichproben: produktiv {{ p_age }} s, Test {{ t_age }} s
+Zeitpunkt: {{ now().strftime('%d.%m.%Y %H:%M:%S') }}
+Wirkleistung produktiv: {{ load | round(1) }} W -- {{ 'Standby. Fuer eine belastbare Pruefung waehrend einer Verdichterladung wiederholen.' if load < 200 else 'unter Last, aussagekraeftig.' }}

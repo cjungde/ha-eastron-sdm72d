@@ -28,6 +28,24 @@ _LOGGER = logging.getLogger(__name__)
 # recorded before this rewrite and after it are the same strings.
 _PRECISION = 4
 
+#: Per-request timeout floor for this unit. `modbus_connection`'s own default
+#: is 10 s, which is not generous on a SHARED connection: requests from every
+#: consumer on the endpoint queue behind one lock, so waiting time adds up
+#: rather than overlapping. This meter polls every 5 s and shares its RS485
+#: gateway with the heat pump, so it is the tightest schedule on the line. An
+#: answer that arrives after the client gave up on it does not vanish — it is
+#: read as the reply to the NEXT request and shows up as `Received unexpected
+#: response with Transaction ID`, followed by a dropped link. That exact line
+#: stood in the log on 04.09.2026, back when two sockets shared the gateway;
+#: sharing the connection removes that cause but not this one.
+#:
+#: `require_timeout` raises the timeout of the whole LINK to at least this
+#: value — it resolves to the maximum over all units on it, so the call is a
+#: floor and not an assignment, and setting it here does not shorten anyone
+#: else's. Raising it drops the current connection so the new value takes
+#: effect at once, which is why this is called once at setup and never again.
+_REQUEST_TIMEOUT = 20.0
+
 # The measurements published as sensors, in the order the register map lists
 # them. Every name is an attribute of the library's measurement component; the
 # strings double as the coordinator data keys the sensor descriptions look up,
@@ -76,6 +94,7 @@ class SDM72DCoordinator(DataUpdateCoordinator[dict[str, float]]):
             params_from_entry_data(dict(entry.data)),
             int(entry.data[CONF_SLAVE_ID]),
         )
+        unit.require_timeout(_REQUEST_TIMEOUT)
         self.meter = SDM72DMeter(unit)
 
         scan_interval = entry.options.get(

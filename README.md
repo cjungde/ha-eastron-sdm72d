@@ -36,7 +36,7 @@ Die Integration legt ein Gerät **SDM72D** (Eastron, SDM72D-M-2) mit 22 Sensoren
 
 ## Voraussetzungen
 
-* **Home Assistant 2026.9 oder neuer.** Die Integration bezieht ihre Modbus-Verbindung über `async_get_unit` der `modbus`-Integration und teilt sie sich dadurch mit anderen Integrationen am selben Bus. Diese API gibt es erst ab 2026.9.
+* **Home Assistant 2026.10 oder neuer.** Die Integration bezieht ihre Modbus-Verbindung über `async_get_unit` der `modbus`-Integration und teilt sie sich dadurch mit anderen Integrationen am selben Bus. Diese API gibt es erst ab 2026.9 — das Minimum liegt trotzdem bei 2026.10, weil der Koordinator über `require_timeout` einen Timeout-Boden von 20 s setzt. Diese Methode fehlt in `modbus-connection` 4.10.0, das der gesamte 2026.9-Zweig pinnt; sie kam in 4.12.3, und 2026.10 pinnt 4.12.4. Ohne den Boden bleibt es beim Bibliotheksstandard von 10 s, der zu knapp ist, sobald mehrere Verbraucher hinter einem Lock serialisieren.
 * **Sonst nichts.** `requirements` im Manifest ist leer: Der Modbus-Stack (`modbus-connection`) kommt mit der `modbus`-Integration von Home Assistant selbst, und die Registerkarte des Zählers liegt in `model.py` und `meter.py` im Integrationsverzeichnis. Es wird beim Einrichten nichts nachinstalliert, und es muss nichts aus dem Netz erreichbar sein.
 
   Bis einschließlich der Vorabversionen von 2.0.0 lag die Registerkarte in einer eigenen Distribution `eastron-sdm-modbus`. Das war sinnvoll, solange sie auch die Blockplanung trug — die kam mit der Umstellung auf die geteilte Verbindung an `modbus_connection.model` und ließ 133 Zeilen reine Deklaration zurück. Dafür eine Veröffentlichungskette zu unterhalten stand in keinem Verhältnis, also ist der Code hierher gezogen.
